@@ -1,0 +1,61 @@
+name: Build Android APK (Emprego PMZ)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "emprego-pmz-apk-ready.zip"
+      - ".github/workflows/build-apk.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          sudo apt-get update && sudo apt-get install -y unzip
+          unzip -o emprego-pmz-apk-ready.zip -d .
+          shopt -s dotglob
+          mv -f emprego-pmz-apk-ready/* .
+          rm -rf emprego-pmz-apk-ready
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci || npm install
+
+      - name: Build web
+        run: npm run build
+
+      - name: Init & add Android (Capacitor)
+        run: |
+          npx cap init emprego-pmz com.seunome.empregopmz --web-dir=dist || true
+          npx cap add android || true
+          npx cap copy
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emprego-pmz-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
